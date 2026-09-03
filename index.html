@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecruitSync | 고급 채용 자동화</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+        .ghost { opacity: 0.3; border: 2px dashed #4F46E5 !important; }
+        .dragging { transform: scale(0.97); }
+        .fade-in { animation: fadeIn 0.2s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* 스크롤바 바 커스텀 */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        /* 모달 백그라운드 */
+        .modal-bg { background-color: rgba(0, 0, 0, 0.4); backdrop-filter: blur(2px); }
+    </style>
+</head>
+<body class="bg-gray-50 flex h-screen overflow-hidden text-gray-800">
+
+    <!-- LNB (사이드바) -->
+    <aside class="w-64 bg-[#0F172A] text-white flex flex-col flex-shrink-0 z-20 shadow-xl">
+        <div class="h-16 flex items-center px-6 font-bold text-xl border-b border-gray-700 tracking-wider">
+            <i class="fa-solid fa-bolt text-indigo-500 mr-2"></i>Recruit<span class="text-indigo-500">Sync</span>
+        </div>
+        <div class="p-4 border-b border-gray-700">
+            <button onclick="navigate('dashboard')" id="nav-dashboard" class="w-full text-left flex items-center py-2 px-4 rounded transition bg-gray-800 text-white font-medium hover:bg-gray-700">
+                <i class="fa-solid fa-chart-line mr-3 w-4"></i> 성과 리포트
+            </button>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto p-4 space-y-1" id="job-list-nav">
+            <!-- JS에서 렌더링 -->
+        </nav>
+        
+        <div class="p-4 border-t border-gray-700">
+            <!-- [추가] 직무 생성 버튼 -->
+            <button onclick="openJdModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold transition flex items-center justify-center text-sm shadow-lg">
+                <i class="fa-solid fa-plus mr-2"></i> 새 채용 직무 생성
+            </button>
+        </div>
+    </aside>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 flex flex-col h-full bg-white relative w-full overflow-hidden" id="main-content">
+        <!-- Dashboard 뷰 -->
+        <div id="view-dashboard" class="h-full w-full overflow-y-auto bg-gray-50 p-8 fade-in">
+            <h1 class="text-2xl font-extrabold mb-6 text-gray-800">전사 채용 성과 리포트</h1>
+            <div id="dashboard-content" class="max-w-5xl space-y-6"></div>
+        </div>
+
+        <!-- Workspace 뷰 -->
+        <div id="view-workspace" class="h-full flex flex-col w-full fade-in hidden">
+            <header id="workspace-header" class="bg-white border-b flex-shrink-0 shadow-sm z-10"></header>
+            <div class="flex-1 overflow-x-auto p-6 bg-gray-50 flex items-start space-x-4 h-full" id="kanban-board"></div>
+        </div>
+    </main>
+
+    <!-- [추가 UI 1] 직무 생성 모달 (Modal) -->
+    <div id="jd-modal" class="fixed inset-0 modal-bg z-50 flex items-center justify-center hidden">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col fade-in">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="font-bold text-lg text-gray-800">새 직무(JD) 생성하기</h3>
+                <button onclick="closeJdModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">채용 포지션 명</label>
+                    <input type="text" id="jd-title" class="w-full border p-2 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="ex. 시니어 iOS 앱 개발자">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">인재상(Target)</label>
+                    <textarea id="jd-target" rows="2" class="w-full border p-2 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="필요 요건이나 팀의 비전을 간단히 적어주세요."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">필수 키워드 (클리퍼 파싱용)</label>
+                    <input type="text" id="jd-keywords" class="w-full border p-2 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="콤마(,)로 구분 (ex. Swift, RxC, iOS 14+)">
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-2">
+                <button onclick="closeJdModal()" class="px-4 py-2 border rounded font-medium text-gray-600 hover:bg-gray-100 transition">취소</button>
+                <button onclick="submitJdForm()" class="px-4 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 transition">생성 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- [추가 UI 2] 인재 상세 프로필 (Right Off-canvas Drawer) -->
+    <div id="profile-drawer" class="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-[left_0_35px_60px_-15px_rgba(0,0,0,0.3)] z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+        <!-- 헤더 영역 -->
+        <div class="p-5 flex justify-between items-start border-b relative overflow-hidden bg-indigo-50/50">
+            <div>
+                <div class="flex items-center space-x-2 mb-1">
+                    <span id="p-platform-icon" class="text-lg"></span>
+                    <h2 id="p-name" class="text-2xl font-extrabold text-gray-800">이름</h2>
+                    <span id="p-status" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold ml-2">상태</span>
+                </div>
+                <p id="p-role" class="text-sm text-gray-600 font-medium">직함 정보</p>
+            </div>
+            <button onclick="closeProfileDrawer()" class="text-gray-400 hover:text-gray-700 z-10 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        
+        <!-- 콘텐츠 영역 (스크롤) -->
+        <div class="flex-1 overflow-y-auto p-6">
+            <h3 class="font-bold text-gray-800 border-b pb-2 mb-4 text-sm"><i class="fa-solid fa-layer-group text-indigo-500 mr-1"></i> 현재 직장</h3>
+            <p id="p-company" class="text-md mb-6 font-medium text-gray-700">회사명</p>
+
+            <h3 class="font-bold text-gray-800 border-b pb-2 mb-4 text-sm"><i class="fa-solid fa-code text-indigo-500 mr-1"></i> 주요 스킬(Keywords)</h3>
+            <div id="p-skills" class="flex flex-wrap gap-1.5 mb-8"></div>
+
+            <h3 class="font-bold text-gray-800 border-b pb-2 mb-4 text-sm"><i class="fa-solid fa-file-lines text-indigo-500 mr-1"></i> 파싱된 상세 경력</h3>
+            <div class="bg-gray-50 border border-dashed rounded-lg p-4 text-sm text-gray-600 h-40 overflow-y-auto font-mono text-[12px]">
+                // 실제 익스텐션이 크롤링하여<br> 
+                // DB로 전달한 Resume DOM Element 의 텍스트가<br> 
+                // 이곳에 정리되어 보입니다. <br><br>
+                경력 1: 웹 프론트엔드 최적화 (2년)<br>
+                경력 2: 신규 시스템 설계 등...
+            </div>
+        </div>
+
+        <!-- 하단 액션 버튼 (사이트로 연결) -->
+        <div class="p-5 border-t bg-white">
+            <a href="#" id="p-original-url" target="_blank" class="w-full flex items-center justify-center bg-gray-800 hover:bg-black text-white font-bold py-3 rounded-lg transition shadow">
+                <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> 원본 프로필 사이트 접속하기
+            </a>
+        </div>
+    </div>
+    <!-- 오프캔버스 클릭 백그라운드 -->
+    <div id="drawer-backdrop" onclick="closeProfileDrawer()" class="fixed inset-0 bg-black/10 z-40 hidden transition-opacity"></div>
+
+<script>
+/** ⭐️ [중요] 1단계에서 발급받은 Google Apps Script 웹 앱 URL을 아래에 붙여넣으세요 ⭐️ **/
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxd1u9qPVL95dwxdUe25PPqFjQBWin6hMOq3f0H0nb1xdCcC1l0tdAPu9wGYmSG55AB/exec";
+
+/** 1. 향상된 Data DB 구조 **/
+const STAGES = [
+    { id: 'sourced', title: '🔍 인재 발굴' }, { id: 'contacted', title: '✉️ 제안/컨택' },
+    { id: 'interview', title: '💬 인터뷰' }, { id: 'hired', title: '🎉 영입 성공' }
+];
+
+let jobsData = [
+    { id: 'job_fe', title: '프론트엔드 리드', target: '대규모 웹 애플리케이션 최적화', keywords: ['React', 'Next.js'] }
+];
+
+// 이제 가짜 데이터를 쓰지 않고 빈 배열로 시작합니다. (구글 시트에서 불러옴)
+let candidatesData = []; 
+
+let currentView = 'dashboard';
+let currentJobId = null;
+
+/** 2. 핵심 UI 렌더링 & DB 연동 **/
+
+// 초기화 시 구글 시트 데이터를 불러옵니다.
+async function initApp() { 
+    renderSidebarNav(); 
+    navigate('dashboard'); 
+    await fetchCandidatesFromSheet(); // 구글 시트 연동 함수 호출
+}
+
+// 🟢 [신규] 구글 시트에서 데이터 가져오기 (GET)
+async function fetchCandidatesFromSheet() {
+    try {
+        if(GAS_URL === "https://script.google.com/macros/s/AKfycbxd1u9qPVL95dwxdUe25PPqFjQBWin6hMOq3f0H0nb1xdCcC1l0tdAPu9wGYmSG55AB/exec") {
+            console.warn("GAS_URL이 설정되지 않아 빈 화면으로 시작합니다.");
+            return;
+        }
+
+        const response = await fetch(GAS_URL);
+        const data = await response.json();
+        
+        // 데이터 정제 (tech 항목이 문자열일 경우 배열로 변환)
+        candidatesData = data.map(item => ({
+            ...item,
+            tech: Array.isArray(item.tech) ? item.tech : (item.tech ? item.tech.split(',') : [])
+        }));
+        
+        // 화면 새로고침
+        if (currentJobId) renderKanbanBoard(currentJobId);
+        renderDashboard(); 
+        renderSidebarNav();
+    } catch (error) {
+        console.error('데이터 로드 실패:', error);
+        alert('구글 시트에서 데이터를 불러오는데 실패했습니다.');
+    }
+}
+
+// 🟢 [수정] 상태 변경 시 구글 시트 업데이트 (POST)
+async function updateStatus(cId, newStatus) {
+    const idx = candidatesData.findIndex(c => c.id == cId);
+    if(idx !== -1 && candidatesData[idx].status !== newStatus) {
+        // 1. 화면(프론트) 즉시 업데이트 (빠른 반응성)
+        candidatesData[idx].status = newStatus;
+        renderKanbanBoard(currentJobId);
+        renderSidebarNav();
+        document.getElementById(`nav-${currentJobId}`).classList.add('bg-gray-800', 'text-white');
+        
+        // 2. 구글 시트(백엔드) 업데이트 요청
+        try {
+            await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'updateStatus',
+                    id: cId,
+                    status: newStatus
+                })
+            });
+        } catch (e) {
+            console.error('DB 업데이트 실패:', e);
+            alert('구글 시트 업데이트 중 오류가 발생했습니다.');
+        }
+    }
+}
+
+function navigate(target, jobId = null) {
+    document.getElementById('view-dashboard').classList.add('hidden');
+    document.getElementById('view-workspace').classList.add('hidden');
+    document.querySelectorAll('#nav-dashboard, #job-list-nav button').forEach(el => {
+        el.classList.replace('bg-gray-800', 'text-gray-400');
+        el.classList.remove('text-white');
+    });
+
+    if (target === 'dashboard') {
+        document.getElementById('view-dashboard').classList.remove('hidden');
+        document.getElementById('nav-dashboard').classList.add('bg-gray-800', 'text-white');
+        renderDashboard();
+    } else if (target === 'workspace' && jobId) {
+        currentJobId = jobId;
+        document.getElementById('view-workspace').classList.remove('hidden');
+        const btn = document.getElementById(`nav-${jobId}`);
+        if(btn) { btn.classList.add('bg-gray-800', 'text-white'); btn.classList.remove('text-gray-400'); }
+        renderWorkspaceHeader(jobId);
+        renderKanbanBoard(jobId);
+    }
+}
+
+function renderSidebarNav() {
+    const navDiv = document.getElementById('job-list-nav');
+    navDiv.innerHTML = `<p class="text-[11px] text-gray-500 font-bold uppercase tracking-widest mb-3 pl-2 mt-2">Active Jobs</p>`;
+    
+    jobsData.forEach(job => {
+        const count = candidatesData.filter(c => c.jobId === job.id && c.status !== 'hired').length;
+        navDiv.innerHTML += `
+            <button id="nav-${job.id}" onclick="navigate('workspace', '${job.id}')" class="w-full text-left truncate flex justify-between items-center py-2.5 px-4 rounded transition text-sm text-gray-400 mb-1 hover:bg-gray-800">
+                <div class="truncate"><i class="fa-solid fa-folder text-gray-600 mr-2"></i>${job.title}</div>
+                ${count > 0 ? `<span class="bg-gray-700 text-[10px] text-white px-2 py-0.5 rounded-full font-mono">${count}</span>` : ''}
+            </button>`;
+    });
+}
+
+function renderDashboard() {
+    const content = document.getElementById('dashboard-content');
+    let h = jobsData.map(job => {
+        let pool = candidatesData.filter(c=>c.jobId===job.id).length;
+        return `
+            <div class="bg-white p-6 border rounded-xl cursor-pointer hover:shadow-lg transition" onclick="navigate('workspace', '${job.id}')">
+                <div class="flex justify-between items-center border-b pb-3 mb-3">
+                    <h3 class="font-extrabold text-indigo-800 text-lg">${job.title}</h3>
+                    <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">풀 ${pool}명</span>
+                </div>
+                <p class="text-xs text-gray-500">필수 태그: ${job.keywords.join(', ')}</p>
+            </div>
+        `;
+    }).join('');
+    content.innerHTML = `<div class="grid grid-cols-2 gap-4">${h}</div>`;
+}
+
+function renderWorkspaceHeader(jobId) {
+    const job = jobsData.find(j => j.id === jobId);
+    document.getElementById('workspace-header').innerHTML = `
+        <div class="p-6 flex justify-between items-center w-full bg-gradient-to-r from-white to-gray-50">
+            <div>
+                <h2 class="text-2xl font-black text-gray-800 mb-2">${job.title}</h2>
+                <div class="flex items-center text-sm font-medium">
+                    <span class="text-gray-500 bg-white border px-2 py-1 rounded mr-3 shadow-sm">설정 태그</span> 
+                    ${job.keywords.map(k=>`<span class="text-indigo-600 mr-2"><i class="fa-solid fa-hashtag text-[10px] opacity-50 mr-0.5"></i>${k}</span>`).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderKanbanBoard(jobId) {
+    const board = document.getElementById('kanban-board');
+    board.innerHTML = '';
+    const jobCandidates = candidatesData.filter(c => c.jobId === jobId);
+
+    STAGES.forEach(stage => {
+        const list = jobCandidates.filter(c => c.status === stage.id);
+        const col = document.createElement('div');
+        col.className = 'w-[320px] shrink-0 bg-gray-200/40 rounded-xl h-full border border-gray-200/80 shadow-sm flex flex-col';
+        col.innerHTML = `
+            <div class="p-4 border-b border-gray-200 bg-white rounded-t-xl flex justify-between items-center">
+                <h3 class="font-extrabold text-gray-700 text-sm tracking-tight">${stage.title}</h3>
+                <span class="text-[11px] px-2 py-0.5 rounded-full font-black ${stage.id==='hired'?'bg-indigo-500 text-white':'bg-gray-200 text-gray-700'}">${list.length}</span>
+            </div>`;
+            
+        const dropZone = document.createElement('div');
+        dropZone.className = 'p-3 flex-1 overflow-y-auto space-y-3 min-h-[150px]';
+        dropZone.dataset.status = stage.id;
+        
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('bg-indigo-50/50'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('bg-indigo-50/50'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.classList.remove('bg-indigo-50/50');
+            const cId = e.dataTransfer.getData('text/plain');
+            updateStatus(parseInt(cId), stage.id);
+        });
+
+        list.forEach(c => dropZone.appendChild(createKanbanCard(c)));
+        col.appendChild(dropZone); board.appendChild(col);
+    });
+}
+
+// 칸반 카드 (클릭 이벤트 적용)
+function createKanbanCard(data) {
+    const card = document.createElement('div');
+    card.className = 'bg-white p-3.5 rounded-lg border shadow-sm cursor-pointer transition hover:border-indigo-400 group relative z-0';
+    card.draggable = true;
+    
+    // 드래그 속성
+    card.addEventListener('dragstart', (e) => {
+        e.stopPropagation(); // 클릭(프로필)과 드래그 엉킴 방지
+        e.dataTransfer.setData('text/plain', data.id);
+        setTimeout(() => card.classList.add('ghost', 'dragging'), 0);
+    });
+    card.addEventListener('dragend', () => card.classList.remove('ghost', 'dragging'));
+
+    // 카드 "클릭 시" 오프캔버스 패널 열기
+    card.onclick = (e) => {
+        if(!card.classList.contains('dragging')) {
+            openProfileDrawer(data.id);
+        }
+    };
+
+    const icon = data.platform === 'linkedin' 
+        ? `<i class="fa-brands fa-linkedin text-blue-600 text-lg bg-blue-50 p-1 rounded"></i>`
+        : `<span class="bg-blue-600 text-white font-black text-[9px] px-1.5 py-1 rounded">JK</span>`;
+    
+    card.innerHTML = `
+        <div class="flex justify-between items-start mb-2">
+            <div>
+                <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-1">${data.name} ${icon}</h4>
+                <p class="text-[12px] text-indigo-500 font-medium">${data.role}</p>
+            </div>
+            <button class="opacity-0 group-hover:opacity-100 text-xs text-gray-400 p-1"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-1">
+            ${data.tech.map(t => `<span class="bg-gray-50 border text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-mono">${t}</span>`).join('')}
+        </div>
+    `;
+    return card;
+}
+
+/** 3. 새로운 모달/오프캔버스 Action Control **/
+function openJdModal() { document.getElementById('jd-modal').classList.remove('hidden'); }
+function closeJdModal() { 
+    document.getElementById('jd-modal').classList.add('hidden');
+    document.getElementById('jd-title').value = '';
+    document.getElementById('jd-target').value = '';
+    document.getElementById('jd-keywords').value = '';
+}
+async function submitJdForm() {
+    const t = document.getElementById('jd-title').value;
+    const tg = document.getElementById('jd-target').value;
+    const kw = document.getElementById('jd-keywords').value.split(',').map(s=>s.trim()).filter(Boolean);
+    
+    if(!t) { alert('채용 직무명은 필수입니다.'); return; }
+    
+    const newId = 'job_' + Date.now();
+    jobsData.push({ id: newId, title: t, target: tg, keywords: kw.length ? kw : ['None'] });
+    
+    closeJdModal();
+    // 데이터 새로고침 및 생성된 직무로 바로 이동
+    await fetchCandidatesFromSheet(); 
+    navigate('workspace', newId); 
+}
+
+// 오프캔버스 패널 로직
+function openProfileDrawer(id) {
+    const candidate = candidatesData.find(c => c.id == id);
+    if(!candidate) return;
+
+    const drawer = document.getElementById('profile-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    
+    // 데이터 맵핑
+    document.getElementById('p-name').innerText = candidate.name || '이름 없음';
+    document.getElementById('p-role').innerText = candidate.role || '직무 정보 없음';
+    document.getElementById('p-company').innerText = candidate.company || '회사 정보 없음';
+    
+    document.getElementById('p-platform-icon').innerHTML = candidate.platform === 'linkedin' 
+        ? `<i class="fa-brands fa-linkedin text-blue-600"></i>` : `<span class="bg-blue-600 text-white font-black text-xs px-1 rounded">JK</span>`;
+    
+    const sId = STAGES.find(s=>s.id === candidate.status);
+    document.getElementById('p-status').innerText = sId ? sId.title : candidate.status;
+    
+    document.getElementById('p-skills').innerHTML = (candidate.tech || []).map(t=>
+        `<span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded font-bold shadow-sm">${t}</span>`
+    ).join('');
+
+    // 실제 프로필 사이트 원문 연결 속성
+    document.getElementById('p-original-url').href = candidate.profileUrl || '#';
+
+    // UI 애니메이션 트리거
+    backdrop.classList.remove('hidden');
+    setTimeout(() => drawer.classList.remove('translate-x-full'), 10);
+}
+function closeProfileDrawer() {
+    document.getElementById('profile-drawer').classList.add('translate-x-full');
+    setTimeout(() => document.getElementById('drawer-backdrop').classList.add('hidden'), 300); 
+}
+
+// 초기화
+window.onload = initApp;
+</script>
+</body>
+</html>
