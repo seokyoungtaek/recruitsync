@@ -271,6 +271,12 @@ function renderDashboard() {
 
 function renderWorkspaceHeader(jobId) {
     const job = jobsData.find(j => j.id === jobId);
+    
+    // 키워드를 링크드인/잡코리아 검색용 URL로 변환 (예: React AND Next.js)
+    const searchKeyword = encodeURIComponent(job.keywords.join(' '));
+    const linkedInSearchUrl = `https://www.linkedin.com/search/results/people/?keywords=${searchKeyword}`;
+    const jobkoreaSearchUrl = `https://www.jobkorea.co.kr/Search/?stext=${searchKeyword}&tabType=resume`;
+
     document.getElementById('workspace-header').innerHTML = `
         <div class="p-6 flex justify-between items-center w-full bg-gradient-to-r from-white to-gray-50">
             <div>
@@ -279,6 +285,16 @@ function renderWorkspaceHeader(jobId) {
                     <span class="text-gray-500 bg-white border px-2 py-1 rounded mr-3 shadow-sm">설정 태그</span> 
                     ${job.keywords.map(k=>`<span class="text-indigo-600 mr-2"><i class="fa-solid fa-hashtag text-[10px] opacity-50 mr-0.5"></i>${k}</span>`).join('')}
                 </div>
+            </div>
+            
+            <!-- 🚀 추가된 자동 검색 버튼 구역 -->
+            <div class="flex space-x-2">
+                <a href="${linkedInSearchUrl}" target="_blank" class="flex items-center px-4 py-2 bg-[#0A66C2] text-white rounded-md font-bold text-sm shadow hover:bg-[#004182] transition">
+                    <i class="fa-brands fa-linkedin mr-2 text-lg"></i> 링크드인 인재 찾기
+                </a>
+                <a href="${jobkoreaSearchUrl}" target="_blank" class="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md font-bold text-sm shadow hover:bg-blue-700 transition">
+                    <span class="font-black text-xs mr-2 bg-white text-blue-600 px-1 rounded">JK</span> 잡코리아 인재 찾기
+                </a>
             </div>
         </div>
     `;
