@@ -39,7 +39,7 @@
         </nav>
         
         <div class="p-4 border-t border-gray-700">
-            <!-- [추가] 직무 생성 버튼 -->
+            <!-- 직무 생성 버튼 -->
             <button onclick="openJdModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold transition flex items-center justify-center text-sm shadow-lg">
                 <i class="fa-solid fa-plus mr-2"></i> 새 채용 직무 생성
             </button>
@@ -61,7 +61,7 @@
         </div>
     </main>
 
-    <!-- [추가 UI 1] 직무 생성 모달 (Modal) -->
+    <!-- 직무 생성 모달 (Modal) -->
     <div id="jd-modal" class="fixed inset-0 modal-bg z-50 flex items-center justify-center hidden">
         <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col fade-in">
             <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
@@ -89,7 +89,7 @@
         </div>
     </div>
 
-    <!-- [추가 UI 2] 인재 상세 프로필 (Right Off-canvas Drawer) -->
+    <!-- 인재 상세 프로필 (Right Off-canvas Drawer) -->
     <div id="profile-drawer" class="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-[left_0_35px_60px_-15px_rgba(0,0,0,0.3)] z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
         <!-- 헤더 영역 -->
         <div class="p-5 flex justify-between items-start border-b relative overflow-hidden bg-indigo-50/50">
@@ -133,20 +133,17 @@
     <div id="drawer-backdrop" onclick="closeProfileDrawer()" class="fixed inset-0 bg-black/10 z-40 hidden transition-opacity"></div>
 
 <script>
-/** ⭐️ [중요] 1단계에서 발급받은 Google Apps Script 웹 앱 URL을 아래에 붙여넣으세요 ⭐️ **/
+/** ⭐️ [중요] 1단계에서 발급받은 Google Apps Script 웹 앱 URL ⭐️ **/
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxd1u9qPVL95dwxdUe25PPqFjQBWin6hMOq3f0H0nb1xdCcC1l0tdAPu9wGYmSG55AB/exec";
 
-/** 1. 향상된 Data DB 구조 **/
+/** 1. Data DB 구조 **/
 const STAGES = [
     { id: 'sourced', title: '🔍 인재 발굴' }, { id: 'contacted', title: '✉️ 제안/컨택' },
     { id: 'interview', title: '💬 인터뷰' }, { id: 'hired', title: '🎉 영입 성공' }
 ];
 
-let jobsData = [
-    { id: 'job_fe', title: '프론트엔드 리드', target: '대규모 웹 애플리케이션 최적화', keywords: ['React', 'Next.js'] }
-];
-
-// 이제 가짜 데이터를 쓰지 않고 빈 배열로 시작합니다. (구글 시트에서 불러옴)
+// 이제 직무와 인재 모두 구글 시트에서 비동기로 불러오기 위해 빈 배열로 시작합니다.
+let jobsData = []; 
 let candidatesData = []; 
 
 let currentView = 'dashboard';
@@ -154,20 +151,34 @@ let currentJobId = null;
 
 /** 2. 핵심 UI 렌더링 & DB 연동 **/
 
-// 초기화 시 구글 시트 데이터를 불러옵니다.
+// 🟢 초기화 시 직무와 인재 데이터를 모두 구글 시트에서 불러옵니다.
 async function initApp() { 
+    await fetchJobsFromSheet();       // 직무 가져오기
+    await fetchCandidatesFromSheet(); // 기존 인재 가져오기
     renderSidebarNav(); 
     navigate('dashboard'); 
-    await fetchCandidatesFromSheet(); // 구글 시트 연동 함수 호출
 }
 
-// 🟢 [신규] 구글 시트에서 데이터 가져오기 (GET)
+// 🟢 [신규] 구글 시트에서 '직무(Jobs)' 데이터 가져오기 (GET)
+async function fetchJobsFromSheet() {
+    try {
+        const response = await fetch(GAS_URL + "?type=jobs");
+        const data = await response.json();
+        
+        // 키워드가 문자열이면 배열로 변환
+        jobsData = data.map(j => ({
+            ...j, 
+            keywords: j.keywords ? j.keywords.split(',') : []
+        }));
+    } catch (error) {
+        console.error('직무 로드 실패:', error);
+    }
+}
+
+// 🟢 구글 시트에서 '인재(Candidates)' 데이터 가져오기 (GET)
 async function fetchCandidatesFromSheet() {
     try {
-        if(GAS_URL === "https://script.google.com/macros/s/AKfycbxd1u9qPVL95dwxdUe25PPqFjQBWin6hMOq3f0H0nb1xdCcC1l0tdAPu9wGYmSG55AB/exec") {
-            console.warn("GAS_URL이 설정되지 않아 빈 화면으로 시작합니다.");
-            return;
-        }
+        if(GAS_URL.includes("여기에_")) return;
 
         const response = await fetch(GAS_URL);
         const data = await response.json();
@@ -183,12 +194,11 @@ async function fetchCandidatesFromSheet() {
         renderDashboard(); 
         renderSidebarNav();
     } catch (error) {
-        console.error('데이터 로드 실패:', error);
-        alert('구글 시트에서 데이터를 불러오는데 실패했습니다.');
+        console.error('인재 데이터 로드 실패:', error);
     }
 }
 
-// 🟢 [수정] 상태 변경 시 구글 시트 업데이트 (POST)
+// 🟢 상태 변경 시 구글 시트 업데이트 (POST)
 async function updateStatus(cId, newStatus) {
     const idx = candidatesData.findIndex(c => c.id == cId);
     if(idx !== -1 && candidatesData[idx].status !== newStatus) {
@@ -211,7 +221,6 @@ async function updateStatus(cId, newStatus) {
             });
         } catch (e) {
             console.error('DB 업데이트 실패:', e);
-            alert('구글 시트 업데이트 중 오류가 발생했습니다.');
         }
     }
 }
@@ -254,6 +263,11 @@ function renderSidebarNav() {
 
 function renderDashboard() {
     const content = document.getElementById('dashboard-content');
+    if (jobsData.length === 0) {
+        content.innerHTML = `<p class="text-gray-500">생성된 직무가 없습니다. 좌측 하단의 '새 채용 직무 생성' 버튼을 눌러주세요.</p>`;
+        return;
+    }
+
     let h = jobsData.map(job => {
         let pool = candidatesData.filter(c=>c.jobId===job.id).length;
         return `
@@ -271,6 +285,7 @@ function renderDashboard() {
 
 function renderWorkspaceHeader(jobId) {
     const job = jobsData.find(j => j.id === jobId);
+    if(!job) return;
     
     // 키워드를 링크드인/잡코리아 검색용 URL로 변환 (예: React AND Next.js)
     const searchKeyword = encodeURIComponent(job.keywords.join(' '));
@@ -380,6 +395,8 @@ function closeJdModal() {
     document.getElementById('jd-target').value = '';
     document.getElementById('jd-keywords').value = '';
 }
+
+// 🟢 [수정됨] 새 직무 생성 함수(DB 전송 로직 추가)
 async function submitJdForm() {
     const t = document.getElementById('jd-title').value;
     const tg = document.getElementById('jd-target').value;
@@ -388,12 +405,31 @@ async function submitJdForm() {
     if(!t) { alert('채용 직무명은 필수입니다.'); return; }
     
     const newId = 'job_' + Date.now();
-    jobsData.push({ id: newId, title: t, target: tg, keywords: kw.length ? kw : ['None'] });
+    const newJob = { id: newId, title: t, target: tg, keywords: kw.length ? kw : ['None'] };
     
+    // 화면에 먼저 반영 (빠른 UX)
+    jobsData.push(newJob);
     closeJdModal();
-    // 데이터 새로고침 및 생성된 직무로 바로 이동
-    await fetchCandidatesFromSheet(); 
+    renderSidebarNav();
     navigate('workspace', newId); 
+    
+    // 뒤에서 구글 시트에 몰래 저장 (POST)
+    try {
+        await fetch(GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                action: 'addJob',
+                id: newId,
+                title: t,
+                target: tg,
+                keywords: newJob.keywords
+            })
+        });
+    } catch (e) {
+        console.error(e);
+        alert('직무 저장 중 오류 발생');
+    }
 }
 
 // 오프캔버스 패널 로직
